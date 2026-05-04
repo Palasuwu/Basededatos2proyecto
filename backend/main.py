@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import boards, threads, posts, users, nodes, relationships, analytics
+from routers import boards, threads, posts, users, nodes, relationships, analytics, csv_loader
+
 
 app = FastAPI(title="ChanDB API", version="1.0.0")
 
@@ -19,6 +20,7 @@ app.include_router(users.router)
 app.include_router(nodes.router)
 app.include_router(relationships.router)
 app.include_router(analytics.router)
+app.include_router(csv_loader.router)
 
 @app.get("/")
 async def root():

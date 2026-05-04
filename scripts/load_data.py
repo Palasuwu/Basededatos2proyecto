@@ -16,11 +16,11 @@ from neo4j import GraphDatabase
 # ── Configuración ──────────────────────────────────────────────────────────────
 URI      = "bolt://localhost:7687"
 USER     = "neo4j"
-PASSWORD = "pala1234"
+PASSWORD = "MGECARG10"
 
 NEO4J_IMPORT = (
-    "/Users/pala/Library/Application Support/neo4j-desktop/Application/Data"
-    "/dbmss/dbms-9ef256c3-87c3-4553-b139-dc661dd2b935/import"
+    r"C:\Users\adria\.Neo4jDesktop2\Data\dbmss"
+    r"\dbms-fa5016ff-306e-4b31-9104-0ccd56ddf8af\import"
 )
 CSV_DIR = os.path.join(os.path.dirname(__file__), '..', 'csv_data')
 

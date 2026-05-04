@@ -1,9 +1,9 @@
 from neo4j import AsyncGraphDatabase
 from serializer import serialize
 
-URI      = "bolt://localhost:7687"
+URI      = "neo4j://127.0.0.1:7687"
 USER     = "neo4j"
-PASSWORD = "pala1234"
+PASSWORD = "MGECARG10"
 
 driver = AsyncGraphDatabase.driver(URI, auth=(USER, PASSWORD))
 
