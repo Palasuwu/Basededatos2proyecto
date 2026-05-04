@@ -135,6 +135,49 @@ async def pagerank():
                 "message": "Instala el plugin Graph Data Science en Neo4j Desktop",
                 "error": str(e)}
 
+# Posts por país (datos para el globo coroplético)
+@router.get("/country-posts")
+async def country_posts():
+    return await q("""
+        MATCH (ip:IP)<-[:POSTED_FROM]-(p:Post)
+        WITH ip.country AS country,
+             count(p)           AS posts,
+             count(DISTINCT ip) AS unique_ips,
+             round(avg(ip.risk_score) * 100, 1) AS avg_risk
+        RETURN country, posts, unique_ips, avg_risk
+        ORDER BY posts DESC
+    """)
+
+# PageRank de posts agregado por país (requiere GDS)
+@router.get("/country-influence")
+async def country_influence():
+    try:
+        try:
+            await q("CALL gds.graph.drop('post-graph', false) YIELD graphName")
+        except Exception:
+            pass
+        await q("CALL gds.graph.project('post-graph','Post',{QUOTES:{orientation:'NATURAL'}})")
+        results = await q("""
+            CALL gds.pageRank.stream('post-graph',{maxIterations:20,dampingFactor:0.85})
+            YIELD nodeId, score
+            WITH gds.util.asNode(nodeId) AS post, score
+            MATCH (ip:IP)<-[:POSTED_FROM]-(post)
+            WITH ip.country AS country,
+                 round(sum(score), 3) AS influence,
+                 count(post)          AS posts
+            RETURN country, influence, posts
+            ORDER BY influence DESC
+        """)
+        try:
+            await q("CALL gds.graph.drop('post-graph')")
+        except Exception:
+            pass
+        return {"status": "ok", "results": results}
+    except Exception as e:
+        return {"status": "gds_not_installed",
+                "message": "Instala el plugin Graph Data Science en Neo4j Desktop",
+                "error": str(e)}
+
 # Agregaciones por board
 @router.get("/board-stats")
 async def board_stats():
