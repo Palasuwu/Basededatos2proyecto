@@ -1,5 +1,9 @@
 """
 CRUD completo de relaciones — cubre todos los puntos de la rúbrica.
+Versión corregida para la Demo Guiada:
+- Las rutas bulk van antes de las rutas con {rel_id}.
+- Usa elementId(r) en vez de id(r) para evitar pérdida de precisión en JavaScript.
+- create_relationship también busca nodos por slug.
 """
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -26,13 +30,14 @@ async def list_relationships(
 
     rows = await q(
         f"MATCH (a)-[r:{rel_type}]->(b) "
-        f"RETURN elementId(r) AS rel_id, properties(r) AS props"
+        f"RETURN elementId(r) AS rel_id, properties(r) AS props, "
         f"labels(a)[0] AS from_label, labels(b)[0] AS to_label, "
         f"coalesce(a.id, a.name, a.address, a.slug) AS from_id, "
         f"coalesce(b.id, b.name, b.address, b.slug) AS to_id "
         f"LIMIT $limit",
         limit=limit
     )
+
     return rows
 
 
@@ -69,7 +74,7 @@ async def create_relationship(body: RelCreate):
         f"WHERE (a.id = $from_id OR a.name = $from_id OR a.address = $from_id OR a.slug = $from_id) "
         f"AND   (b.id = $to_id   OR b.name = $to_id   OR b.address = $to_id   OR b.slug = $to_id) "
         f"CREATE (a)-[r:{body.rel_type} {{{prop_str}}}]->(b) "
-        f"RETURN id(r) AS rel_id, properties(r) AS props",
+        f"RETURN elementId(r) AS rel_id, properties(r) AS props",
         from_id=body.from_id,
         to_id=body.to_id,
         **props
@@ -104,7 +109,8 @@ async def bulk_set_rel_property(rel_type: str, body: BulkRelProp):
 
     rows = await q(
         f"MATCH ()-[r:{rel_type}]->() {w} "
-        f"SET r[$prop] = $value RETURN count(r) AS updated",
+        f"SET r[$prop] = $value "
+        f"RETURN count(r) AS updated",
         fp=body.filter_prop,
         fv=body.filter_value,
         prop=body.prop,
@@ -128,7 +134,8 @@ async def bulk_remove_rel_property(
 
     rows = await q(
         f"MATCH ()-[r:{rel_type}]->() {w} "
-        f"REMOVE r[$prop] RETURN count(r) AS updated",
+        f"REMOVE r[$prop] "
+        f"RETURN count(r) AS updated",
         fp=filter_prop,
         fv=filter_value,
         prop=prop_name
@@ -150,7 +157,9 @@ async def delete_multiple_relationships(
 
     rows = await q(
         f"MATCH ()-[r:{rel_type}]->() {w} "
-        f"WITH r, count(r) AS total DELETE r RETURN total",
+        f"WITH r, count(r) AS total "
+        f"DELETE r "
+        f"RETURN total",
         fp=filter_prop,
         fv=filter_value
     )
@@ -160,14 +169,15 @@ async def delete_multiple_relationships(
 
 # ── INDIVIDUALES DESPUÉS ────────────────────────────────────────────────
 @router.patch("/{rel_type}/{rel_id}/property")
-async def set_rel_property(rel_type: str, rel_id: int, body: RelPropOp):
+async def set_rel_property(rel_type: str, rel_id: str, body: RelPropOp):
     if rel_type not in ALLOWED_RELS:
         raise HTTPException(400, "Relationship type not allowed")
 
     rows = await q(
-        f"MATCH ()-[r:{rel_type}]->() WHERE id(r) = $rid "
+        f"MATCH ()-[r:{rel_type}]->() "
+        f"WHERE elementId(r) = $rid "
         f"SET r[$prop] = $value "
-        f"RETURN id(r) AS rel_id, properties(r) AS props",
+        f"RETURN elementId(r) AS rel_id, properties(r) AS props",
         rid=rel_id,
         prop=body.prop,
         value=body.value
@@ -180,14 +190,15 @@ async def set_rel_property(rel_type: str, rel_id: int, body: RelPropOp):
 
 
 @router.delete("/{rel_type}/{rel_id}/property/{prop_name}")
-async def remove_rel_property(rel_type: str, rel_id: int, prop_name: str):
+async def remove_rel_property(rel_type: str, rel_id: str, prop_name: str):
     if rel_type not in ALLOWED_RELS:
         raise HTTPException(400, "Relationship type not allowed")
 
     rows = await q(
-        f"MATCH ()-[r:{rel_type}]->() WHERE id(r) = $rid "
+        f"MATCH ()-[r:{rel_type}]->() "
+        f"WHERE elementId(r) = $rid "
         f"REMOVE r[$prop] "
-        f"RETURN id(r) AS rel_id, properties(r) AS props",
+        f"RETURN elementId(r) AS rel_id, properties(r) AS props",
         rid=rel_id,
         prop=prop_name
     )
@@ -199,13 +210,20 @@ async def remove_rel_property(rel_type: str, rel_id: int, prop_name: str):
 
 
 @router.delete("/{rel_type}/{rel_id}")
-async def delete_relationship(rel_type: str, rel_id: int):
+async def delete_relationship(rel_type: str, rel_id: str):
     if rel_type not in ALLOWED_RELS:
         raise HTTPException(400, "Relationship type not allowed")
 
-    await q(
-        f"MATCH ()-[r:{rel_type}]->() WHERE id(r) = $rid DELETE r",
+    rows = await q(
+        f"MATCH ()-[r:{rel_type}]->() "
+        f"WHERE elementId(r) = $rid "
+        f"WITH r, elementId(r) AS deleted_id "
+        f"DELETE r "
+        f"RETURN deleted_id",
         rid=rel_id
     )
 
-    return {"deleted": rel_id}
+    if not rows:
+        raise HTTPException(404)
+
+    return {"deleted": rows[0]["deleted_id"]}
